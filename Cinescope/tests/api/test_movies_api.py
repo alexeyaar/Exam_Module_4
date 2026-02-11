@@ -7,11 +7,13 @@ class TestMoviesAPI:
     def test_get_movies(self,api_manager: ApiManager):
         #Получение списка афиш
         response = api_manager.movies_api.get_movies_info()
+
         assert "movies" in response.json(), "В теле ответа отсутствует список фильмов"
 
     def test_get_movies_filtered(self, api_manager: ApiManager, generate_random_int):
         # Получение списка афиш c фильтрацией
         response = api_manager.movies_api.get_movies_info_filtered(page=generate_random_int)
+
         assert response.json()['page'] == generate_random_int, "Неверная фильтрация страницы"
 
     def test_create_movie(self,data_movie,api_manager: ApiManager,):
@@ -33,6 +35,7 @@ class TestMoviesAPI:
     def test_get_movie(self,api_manager: ApiManager,create_movie):
         #Получение фильма
         response_get = api_manager.movies_api.get_movie(create_movie)
+
         assert response_get.json()["id"] == create_movie['id'], "Получен не запрашиваемый ресурс"
         assert response_get.json()["name"] == create_movie["name"], "Получен не запрашиваемый ресурс"
         assert response_get.json()["price"] == create_movie["price"], "Получен не запрашиваемый ресурс"
@@ -70,6 +73,50 @@ class TestMoviesAPI:
         assert response_get.json()["genre"]["name"] == response.json()["genre"]['name'], "Изменен жанр"
 
 
+@pytest.mark.negative
+class TestMovieAPINegative:
+
+    def test_get_movies_bad_filtered(self, api_manager: ApiManager, generate_random_int):
+        # Получение списка афиш c ошибочной фильтрацией
+        response = api_manager.movies_api.get_movies_info_filtered(expected_status=400,locations=generate_random_int)
+
+        assert "message" in response.json(), "В теле ответа отсутствует сообщение об ошибке"
+        assert "error" in response.json(), "В теле ответа отсутствует описание ошибки"
+        assert "statusCode" in response.json(), "В теле ответа отсутствует статус код"
+        #assert response.text != generate_random_int, ""
+
+    def test_create_movie_not_body(self,api_manager: ApiManager,):
+        #Создание фильма без тела запроса
+        api_manager.auth_api.authenticate(user_creds)
+        response = api_manager.movies_api.create_movies(data={},expected_status=400)
+
+        assert "message" in response.json(), "В теле ответа отсутствует сообщение об ошибке"
+        assert "error" in response.json(), "В теле ответа отсутствует описание ошибки"
+        assert "statusCode" in response.json(), "В теле ответа отсутствует статус код"
+
+    def test_get_bad_movie(self,api_manager: ApiManager,bad_id_movies,):
+        #Получение несуществующего фильма
+        response_get = api_manager.movies_api.get_bad_movie(bad_id_movies,expected_status=500)
+
+        assert "message" in response_get.json(), "В теле ответа отсутствует сообщение об ошибке"
+        assert "statusCode" in response_get.json(), "В теле ответа отсутствует статус код"
+
+    def test_delete_bad_movie(self,api_manager:ApiManager,bad_id_movies):
+        api_manager.auth_api.authenticate(user_creds)
+        #Удаление фильма
+        response = api_manager.movies_api.delete_bad_movie(bad_id_movies,expected_status=404)
+
+        assert "message" in response.json(), "В теле ответа отсутствует сообщение об ошибке"
+        assert "statusCode" in response.json(), "В теле ответа отсутствует статус код"
+        assert "error" in response.json(), "В теле ответа отсутствует описание ошибки"
+
+    def test_edit_movie_not_body(self, create_movie, api_manager: ApiManager, data_for_edit_bad_movie):
+        # Изменение фильма
+        response = api_manager.movies_api.edit_movie_bad(data_for_edit_bad_movie,create_movie['id'],expected_status=400)
+
+        assert "message" in response.json(), "В теле ответа отсутствует сообщение об ошибке"
+        assert "statusCode" in response.json(), "В теле ответа отсутствует статус код"
+        assert "error" in response.json(), "В теле ответа отсутствует описание ошибки"
 
 
 
