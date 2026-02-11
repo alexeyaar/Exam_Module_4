@@ -1,0 +1,8 @@
+pytest
+requests
+faker
+python-dotenv
+pytest-html
+logging
+json
+os

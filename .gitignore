@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+reports/
+allure-results/
+*.html
+*.log
+.env
+credentials.json
+config_secret.py
