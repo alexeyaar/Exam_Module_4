@@ -1,5 +1,5 @@
-from Cinescope.constants import LOGIN_ENDPOINT, REGISTER_ENDPOINT
-from Cinescope.custom_requester.custom_requester import CustomRequester
+from Exam_Module_4.Cinescope.constants import LOGIN_ENDPOINT, REGISTER_ENDPOINT
+from Exam_Module_4.Cinescope.custom_requester.custom_requester import CustomRequester
 
 
 
@@ -31,9 +31,15 @@ class AuthAPI(CustomRequester):
 
 
     def authenticate(self, user_creds):
-        login_data = {
+        if type(user_creds) == dict:
+            login_data = {
             "email": user_creds["username"],
             "password": user_creds["password"]
+            }
+        else:
+            login_data = {
+                "email": user_creds[0],
+                "password": user_creds[1]
         }
         response = self.login_user(login_data).json()
         if "accessToken" not in response:

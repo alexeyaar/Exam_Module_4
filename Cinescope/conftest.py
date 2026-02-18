@@ -1,33 +1,61 @@
+import sys
+from pathlib import Path
+import os
+from Exam_Module_4.Cinescope.models.base_models import TestUser
 from faker import Faker
 import pytest
 import requests
+from Exam_Module_4.Cinescope.entities.user import User
 from custom_requester.custom_requester import CustomRequester
-from Cinescope.clients.api_manager import ApiManager
-from Cinescope.utils.data_generator  import DataGenerator
-from Cinescope.constants import user_creds, REGISTER_ENDPOINT, BASE_URL
+from Exam_Module_4.Cinescope.clients.api_manager import ApiManager
+from Exam_Module_4.Cinescope.utils.data_generator  import DataGenerator
+from Exam_Module_4.Cinescope.constants import user_creds, REGISTER_ENDPOINT, BASE_URL, Roles
+from Exam_Module_4.Cinescope.resources.user_creds import SuperAdminCreds
+
+THIS_FILE = Path(__file__).resolve()
+PROJECT_ROOT = THIS_FILE.parent.parent.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+
 
 faker = Faker('ru_RU')
 
 
-@pytest.fixture(scope="function",autouse=False)
-def test_user():
-    """
-    Генерация случайного пользователя для тестов.
-    """
-    random_email = DataGenerator.generate_random_email()
-    random_name = DataGenerator.generate_random_name()
-    random_password = DataGenerator.generate_random_password()
+# @pytest.fixture(scope="function",autouse=False)
+# def test_user():
+#     """
+#     Генерация случайного пользователя для тестов.
+#     """
+#     random_email = DataGenerator.generate_random_email()
+#     random_name = DataGenerator.generate_random_name()
+#     random_password = DataGenerator.generate_random_password()
+#
+#     return {
+#         "email": random_email,
+#         "fullName": random_name,
+#         "password": random_password,
+#         "passwordRepeat": random_password,
+#         "roles": Roles.USER.value
+#     }
 
-    return {
-        "email": random_email,
-        "fullName": random_name,
-        "password": random_password,
-        "passwordRepeat": random_password,
-        "roles": ["USER"]
-    }
+@pytest.fixture
+def test_user() -> TestUser:
+    random_password = DataGenerator.generate_random_password()
+    print("Вызов фикстуры регистрации")
+
+    return TestUser(
+        email=DataGenerator.generate_random_email(),
+        fullName=DataGenerator.generate_random_name(),
+        password=random_password,
+        passwordRepeat=random_password,
+        roles=[Roles.USER.value]
+    )
 
 @pytest.fixture(scope="function")
-def registered_user(requester, test_user):
+def registered_user(requester, test_user) -> TestUser:
     """
     Фикстура для регистрации и получения данных зарегистрированного пользователя.
     """
@@ -37,10 +65,14 @@ def registered_user(requester, test_user):
         data=test_user,
         expected_status=201
     )
-    response_data = response.json()
-    registered_user = test_user.copy()
-    registered_user["id"] = response_data["id"]
-    return registered_user
+    print('Вызов фикстуры регистрации и данных зарегистрированного пользователя для логина')
+    return TestUser(
+        email=test_user.email,
+        fullName=test_user.fullName,
+        password=test_user.password,
+        passwordRepeat=test_user.passwordRepeat,
+        roles=test_user.roles
+    )
 
 @pytest.fixture(scope="session")
 def requester():
@@ -87,7 +119,7 @@ def data_movie():
 
 @pytest.fixture
 def create_movie(api_manager,data_movie):
-    resp_autentificate = api_manager.auth_api.authenticate(user_creds)
+    api_manager.auth_api.authenticate(user_creds)
     response = api_manager.movies_api.create_movies(data_movie)
     movie = response.json()
 
@@ -111,3 +143,67 @@ def data_for_edit_bad_movie():
         "imageUrl": faker.random_int(),
         "price": faker.image_url()
     }
+@pytest.fixture
+def user_session():
+    user_pool = []
+
+    def _create_user_session():
+        session = requests.Session()
+        user_session = ApiManager(session)
+        user_pool.append(user_session)
+        return user_session
+
+    yield _create_user_session
+
+    for user in user_pool:
+            user.close_session()
+
+@pytest.fixture
+def super_admin(user_session):
+    new_session = user_session()
+    super_admin = User(SuperAdminCreds.USERNAME,
+                       SuperAdminCreds.PASSWORD,
+                       [Roles.SUPER_ADMIN.value],
+                       new_session)
+
+    super_admin.api.auth_api.authenticate(super_admin.creds)
+    return super_admin
+@pytest.fixture
+def creation_user_data(test_user) -> TestUser:
+    return TestUser(
+        email=test_user.email,
+        fullName=test_user.fullName,
+        password=test_user.password,
+        passwordRepeat=test_user.passwordRepeat,
+        roles=test_user.roles,
+        verified=True,
+        banned= False
+    )
+
+@pytest.fixture
+def common_user(user_session, super_admin, creation_user_data):
+    new_session = user_session()
+
+    common_user = User(
+        creation_user_data.email,
+        creation_user_data.password,
+        list(Roles.USER.value),
+        new_session)
+
+    super_admin.api.admin_users_api.create_user(creation_user_data)
+    common_user.api.auth_api.authenticate(common_user.creds)
+    return common_user
+
+@pytest.fixture
+def common_admin(user_session, super_admin, creation_user_data):
+    new_session = user_session()
+
+    common_admin = User(
+        creation_user_data.email,
+        creation_user_data.password,
+        list(Roles.ADMIN.value),
+        new_session)
+
+    super_admin.api.admin_users_api.create_user(creation_user_data)
+    common_admin.api.auth_api.authenticate(common_admin.creds)
+    return common_admin
