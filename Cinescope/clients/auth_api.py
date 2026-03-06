@@ -1,5 +1,5 @@
-from Exam_Module_4.Cinescope.constants import LOGIN_ENDPOINT, REGISTER_ENDPOINT
-from Exam_Module_4.Cinescope.custom_requester.custom_requester import CustomRequester
+from constants import LOGIN_ENDPOINT, REGISTER_ENDPOINT,USER_ENDPOINT
+from custom_requester.custom_requester import CustomRequester
 
 
 
@@ -13,33 +13,34 @@ class AuthAPI(CustomRequester):
         return self.send_request(
             method="POST",
             endpoint=REGISTER_ENDPOINT,
-            data=user_data,
+            json=user_data.model_dump(mode="json",exclude_unset=True),
             expected_status=expected_status
         )
 
-    def login_user(self, login_data, expected_status=200):
+    def login_user(self, login_data, expected_status=201):
 
         return self.send_request(
             method="POST",
             endpoint=LOGIN_ENDPOINT,
-            data=login_data,
+            json=login_data,
             expected_status=expected_status
         )
 
-    def delete_user(self):
-        pass
+    def delete_user(self, user_id):
+        return self.send_request(
+            method="DELETE",
+            endpoint=f"{USER_ENDPOINT}/{user_id}",
+            expected_status=200
+        )
+
+
 
 
     def authenticate(self, user_creds):
-        if type(user_creds) == dict:
-            login_data = {
-            "email": user_creds["username"],
+        print("Креды:",user_creds, "+++++++++++++++++++++++++++++++++++++++++++")
+        login_data = {
+            "email": user_creds["email"],
             "password": user_creds["password"]
-            }
-        else:
-            login_data = {
-                "email": user_creds[0],
-                "password": user_creds[1]
         }
         response = self.login_user(login_data).json()
         if "accessToken" not in response:

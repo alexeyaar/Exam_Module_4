@@ -1,6 +1,6 @@
-from Exam_Module_4.Cinescope.clients.api_manager import ApiManager
+from clients.api_manager import ApiManager
 class User:
-    def __init__(self, email: str, password: str, roles: list, api : ApiManager):
+    def __init__(self, email: str, password: str, roles: list, api: ApiManager):
         self.email = email
         self.password = password
         self.roles = roles
@@ -8,4 +8,9 @@ class User:
 
     @property
     def creds(self):
-        return self.email,self.password
+        mail = self.email
+        password = self.password
+        return {
+            "email":mail,
+            "password":password
+        }

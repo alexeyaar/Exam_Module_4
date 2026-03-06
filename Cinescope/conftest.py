@@ -1,27 +1,18 @@
-import sys
-from pathlib import Path
-import os
-from Exam_Module_4.Cinescope.models.base_models import TestUser
 from faker import Faker
 import pytest
 import requests
-from Exam_Module_4.Cinescope.entities.user import User
+from sqlalchemy.orm import Session
+from db_reuester.db_client import get_db_session
+from models.user_models import TestUser, RegisterUserResponse
+from tests.api.test_user_api import TestUserApi
+from entities.user import User
+from resources.user_creds import SuperAdminCreds
 from custom_requester.custom_requester import CustomRequester
-from Exam_Module_4.Cinescope.clients.api_manager import ApiManager
-from Exam_Module_4.Cinescope.utils.data_generator  import DataGenerator
-from Exam_Module_4.Cinescope.constants import user_creds, REGISTER_ENDPOINT, BASE_URL, Roles
-from Exam_Module_4.Cinescope.resources.user_creds import SuperAdminCreds
-
-THIS_FILE = Path(__file__).resolve()
-PROJECT_ROOT = THIS_FILE.parent.parent.parent
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-
-
-
-faker = Faker('ru_RU')
+from clients.api_manager import ApiManager
+from utils.data_generator  import DataGenerator
+from constants import user_creds, REGISTER_ENDPOINT, BASE_URL, Roles
+from db_reuester.db_helpers import DBHelper
+faker = Faker()
 
 
 # @pytest.fixture(scope="function",autouse=False)
@@ -38,41 +29,48 @@ faker = Faker('ru_RU')
 #         "fullName": random_name,
 #         "password": random_password,
 #         "passwordRepeat": random_password,
-#         "roles": Roles.USER.value
+#         "roles": [Roles.USER.value]
 #     }
 
 @pytest.fixture
 def test_user() -> TestUser:
     random_password = DataGenerator.generate_random_password()
-    print("Вызов фикстуры регистрации")
 
     return TestUser(
         email=DataGenerator.generate_random_email(),
         fullName=DataGenerator.generate_random_name(),
         password=random_password,
         passwordRepeat=random_password,
-        roles=[Roles.USER.value]
+        roles=[Roles.USER.value],
     )
 
+
 @pytest.fixture(scope="function")
-def registered_user(requester, test_user) -> TestUser:
-    """
-    Фикстура для регистрации и получения данных зарегистрированного пользователя.
-    """
+def registered_user(requester, test_user) -> RegisterUserResponse:
     response = requester.send_request(
         method="POST",
         endpoint=REGISTER_ENDPOINT,
-        data=test_user,
+        data=test_user.model_dump(mode="json",exclude_unset=True),
         expected_status=201
     )
-    print('Вызов фикстуры регистрации и данных зарегистрированного пользователя для логина')
-    return TestUser(
-        email=test_user.email,
-        fullName=test_user.fullName,
-        password=test_user.password,
-        passwordRepeat=test_user.passwordRepeat,
-        roles=test_user.roles
-    )
+    response_data = response.json()
+    registered_user = test_user.model_dump(mode="json",exclude_unset=True)
+    # registered_user.id = response_data["id"]
+    return TestUser(**registered_user)
+
+# @pytest.fixture(scope="function")
+# def registered_user(requester, test_user):
+#
+#     response = requester.send_request(
+#         method="POST",
+#         endpoint=REGISTER_ENDPOINT,
+#         data=test_user,
+#         expected_status=201
+#     )
+#     response_data = response.json()
+#     registered_user = test_user.copy()
+#     registered_user["id"] = response_data["id"]
+#     return registered_user
 
 @pytest.fixture(scope="session")
 def requester():
@@ -132,10 +130,12 @@ def data_for_edit_movie():
         "imageUrl": faker.image_url(),
         "price": faker.random_int()
     }
+
 @pytest.fixture
 def bad_id_movies():
     value = ["айди", True, False, None, [], {"cinema": 43}, (1,2,), "id"]
     return  faker.random_element(value)
+
 @pytest.fixture
 def data_for_edit_bad_movie():
     return {
@@ -143,6 +143,7 @@ def data_for_edit_bad_movie():
         "imageUrl": faker.random_int(),
         "price": faker.image_url()
     }
+
 @pytest.fixture
 def user_session():
     user_pool = []
@@ -156,41 +157,41 @@ def user_session():
     yield _create_user_session
 
     for user in user_pool:
-            user.close_session()
+        user.close_session()
 
 @pytest.fixture
 def super_admin(user_session):
     new_session = user_session()
-    super_admin = User(SuperAdminCreds.USERNAME,
-                       SuperAdminCreds.PASSWORD,
-                       [Roles.SUPER_ADMIN.value],
-                       new_session)
+
+    super_admin = User(
+        SuperAdminCreds.USERNAME,
+        SuperAdminCreds.PASSWORD,
+        [Roles.SUPER_ADMIN.value],
+        new_session)
 
     super_admin.api.auth_api.authenticate(super_admin.creds)
     return super_admin
-@pytest.fixture
-def creation_user_data(test_user) -> TestUser:
-    return TestUser(
-        email=test_user.email,
-        fullName=test_user.fullName,
-        password=test_user.password,
-        passwordRepeat=test_user.passwordRepeat,
-        roles=test_user.roles,
-        verified=True,
-        banned= False
-    )
+
+# @pytest.fixture(scope="function")
+# def creation_user_data(test_user):
+#     updated_data = test_user.copy()
+#     updated_data.update({
+#         "verified": True,
+#         "banned": False
+#     })
+#     return updated_data
 
 @pytest.fixture
-def common_user(user_session, super_admin, creation_user_data):
+def common_user(user_session, super_admin, registration_user_data):
     new_session = user_session()
 
     common_user = User(
-        creation_user_data.email,
-        creation_user_data.password,
-        list(Roles.USER.value),
+        registration_user_data.email,
+        registration_user_data.password,
+        [Roles.USER.value],
         new_session)
 
-    super_admin.api.admin_users_api.create_user(creation_user_data)
+    super_admin.api.user_api.create_user(registration_user_data)
     common_user.api.auth_api.authenticate(common_user.creds)
     return common_user
 
@@ -199,11 +200,71 @@ def common_admin(user_session, super_admin, creation_user_data):
     new_session = user_session()
 
     common_admin = User(
-        creation_user_data.email,
-        creation_user_data.password,
-        list(Roles.ADMIN.value),
+        creation_user_data['email'],
+        creation_user_data['password'],
+        [Roles.ADMIN.value],
         new_session)
 
-    super_admin.api.admin_users_api.create_user(creation_user_data)
+    super_admin.api.user_api.create_user(creation_user_data)
     common_admin.api.auth_api.authenticate(common_admin.creds)
     return common_admin
+
+@pytest.fixture
+def user_fixture(request):
+    return request.getfixturevalue(request.param)
+
+@pytest.fixture
+def registration_user_data() -> TestUser:
+    random_password = DataGenerator.generate_random_password()
+
+    return TestUser(
+        email= DataGenerator.generate_random_email(),
+        fullName= DataGenerator.generate_random_name(),
+        password= random_password,
+        passwordRepeat= random_password,
+        roles=[Roles.USER.value],
+        banned= False,
+        verified = True
+    )
+# def test_user() -> TestUser:
+#     random_password = DataGenerator.generate_random_password()
+#
+#     return TestUser(
+#         email=DataGenerator.generate_random_email(),
+#         fullName=DataGenerator.generate_random_name(),
+#         password=random_password,
+#         passwordRepeat=random_password,
+#         roles=[Roles.USER.value]
+# def registration_user_data():
+#     random_password = DataGenerator.generate_random_password()
+#
+#     return {
+#         "email": DataGenerator.generate_random_email(),
+#         "fullName": DataGenerator.generate_random_name(),
+#         "password": random_password,
+#         "passwordRepeat": random_password,
+#         "roles": [Roles.USER.value],
+#         "banned": False,
+#         "virified": True
+#     }
+
+@pytest.fixture(scope="function")
+def db_session():
+    db_session = get_db_session()
+    yield db_session
+    db_session.close()
+
+@pytest.fixture(scope="function")
+def db_helper(db_session):
+    db_helper = DBHelper(db_session)
+    return db_helper
+
+@pytest.fixture(scope="function")
+def created_test_user(db_helper):
+    user = db_helper.create_test_users(DataGenerator.generate_user_data())
+    yield user
+    if db_helper.get_user_by_id(user.id):
+        db_helper.delete_user(user)
+@pytest.fixture
+def data_movie_db():
+    return DataGenerator.generate_movies_data()

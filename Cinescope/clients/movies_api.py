@@ -1,10 +1,11 @@
-from Exam_Module_4.Cinescope.constants import BASE_URL
-from Exam_Module_4.Cinescope.custom_requester.custom_requester import MoviesRequester
+from constants import API_URL
+from custom_requester.custom_requester import CustomRequester, MoviesRequester
 
 
 class MoviesAPI(MoviesRequester):
+    base_url = API_URL
     def __init__(self, session):
-        super().__init__(session=session, base_url=BASE_URL)
+        super().__init__(session=session, base_url=API_URL)
         self.session = session
 
         """Класс для работы с API фильмов."""
@@ -31,7 +32,7 @@ class MoviesAPI(MoviesRequester):
             method="POST",
             endpoint="/movies",
             expected_status=expected_status,
-            data=data
+            json=data
         )
     def get_movie(self,create_movie,expected_status = 200):
         return self.send_request(
@@ -43,13 +44,14 @@ class MoviesAPI(MoviesRequester):
         return self.send_request(
             method="DELETE",
             endpoint=f"/movies/{create_movie['id']}",
-            expected_status=expected_status        )
+            expected_status=expected_status
+        )
 
     def edit_movie(self,create_movie,data_for_edit_movie,expected_status = 200):
         return self.send_request(
             method="PATCH",
             endpoint=f"/movies/{create_movie}",
-            data=data_for_edit_movie,
+            json=data_for_edit_movie,
             expected_status = expected_status
         )
     def get_bad_movie(self,bad_id_movies,expected_status = 200):
