@@ -2,6 +2,8 @@ from faker import Faker
 import pytest
 import requests
 from sqlalchemy.orm import Session
+
+from models.page_odjects_models import CinescopeRegisterPage
 from db_reuester.db_client import get_db_session
 from models.user_models import TestUser, RegisterUserResponse
 from tests.api.test_user_api import TestUserApi
@@ -12,6 +14,10 @@ from clients.api_manager import ApiManager
 from utils.data_generator  import DataGenerator
 from constants import user_creds, REGISTER_ENDPOINT, BASE_URL, Roles
 from db_reuester.db_helpers import DBHelper
+import pytest
+from playwright.sync_api import sync_playwright
+
+DEFAULT_UI_TIMEOUT = 60000
 faker = Faker()
 
 
@@ -59,7 +65,7 @@ def registered_user(requester, test_user) -> RegisterUserResponse:
     return TestUser(**registered_user)
 
 # @pytest.fixture(scope="function")
-# def registered_user(requester, test_user):
+# def registered_user_ui(requester, test_user):
 #
 #     response = requester.send_request(
 #         method="POST",
@@ -71,6 +77,27 @@ def registered_user(requester, test_user) -> RegisterUserResponse:
 #     registered_user = test_user.copy()
 #     registered_user["id"] = response_data["id"]
 #     return registered_user
+@pytest.fixture
+def registered_user_ui():
+    with sync_playwright() as playwright:
+        random_email = DataGenerator.generate_random_email()
+        random_name = DataGenerator.generate_random_name()
+        random_password = DataGenerator.generate_random_password()
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+
+        # Создаем объект страницы регистрации cinescope
+        register_page = CinescopeRegisterPage(page)
+        user_creds = {
+            'email':random_email,
+            'password':random_password
+        }
+
+        # Открываем страницу
+        register_page.open()
+        register_page.register(random_name, random_email, random_password, random_password)
+        return user_creds
+
 
 @pytest.fixture(scope="session")
 def requester():
@@ -268,3 +295,22 @@ def created_test_user(db_helper):
 @pytest.fixture
 def data_movie_db():
     return DataGenerator.generate_movies_data()
+
+@pytest.fixture(scope="session")
+def browser(playwright):
+    browser = playwright.chromium.launch()
+    yield browser
+    browser.close()
+
+@pytest.fixture(scope="function")
+def context(browser):
+    context = browser.new_context()
+    context.tracing.start(screenshots=True,snapshots=True,sources=True)
+    context.set_default_timeout(DEFAULT_UI_TIMEOUT)
+    yield context
+    context.close()
+@pytest.fixture(scope="function")
+def page(context):
+    page = context.new_page()
+    yield page
+    page.close()
